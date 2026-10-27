@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic Tac Toe - Mỗi ván một màu</title>
+<style>
+  :root { --accent: #7c5cff; --bg: #101322; --panel: #1a1e33; --text: #f5f6ff; --muted: #aab0ce; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; padding: 24px 14px; display: flex; justify-content: center; align-items: center;
+    font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: var(--text);
+    background: radial-gradient(circle at top, #25294b, var(--bg) 60%); }
+  .app { width: min(100%, 520px); }
+  h1 { margin: 0 0 6px; text-align: center; font-size: clamp(27px, 5vw, 38px); }
+  .subtitle { text-align: center; color: var(--muted); margin: 0 0 22px; }
+  .panel { background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid #343956; border-radius: 20px; padding: 18px; box-shadow: 0 20px 60px #0004; }
+  .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  label { display: block; color: var(--muted); font-size: 13px; margin: 0 0 7px; }
+  select, button { font: inherit; }
+  select { width: 100%; color: var(--text); background: #111529; border: 1px solid #414866; border-radius: 11px; padding: 11px; }
+  .mode-wrap { margin-top: 13px; }
+  .hidden { display: none !important; }
+  .status { text-align: center; font-weight: 700; font-size: 18px; min-height: 28px; margin: 18px 0 12px; }
+  .meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .turn { color: var(--text); font-weight: 700; }
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .cell { aspect-ratio: 1; border: 1px solid #414866; border-radius: 16px; background: #242943; color: white; font-size: clamp(40px, 12vw, 66px);
+    font-weight: 800; cursor: pointer; transition: transform .12s, background .2s, border-color .2s; }
+  .cell:hover:enabled { transform: translateY(-2px); border-color: var(--accent); }
+  .cell:disabled { cursor: default; }
+  .cell.x { color: var(--x-color); background: color-mix(in srgb, var(--x-color) 15%, #242943); }
+  .cell.o { color: var(--o-color); background: color-mix(in srgb, var(--o-color) 15%, #242943); }
+  .cell.win { outline: 3px solid var(--accent); outline-offset: -3px; background: color-mix(in srgb, var(--accent) 25%, #242943); }
+  .actions { display: flex; gap: 10px; margin-top: 16px; }
+  .actions button { flex: 1; border: 0; border-radius: 12px; padding: 12px 14px; font-weight: 700; cursor: pointer; }
+  .primary { background: var(--accent); color: white; }
+  .secondary { background: #2a304b; color: var(--text); border: 1px solid #414866 !important; }
+  .scoreline { display: flex; justify-content: center; gap: 18px; margin-top: 16px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+  .scoreline strong { color: var(--text); }
+  .hint { text-align: center; color: var(--muted); font-size: 12px; margin: 15px 0 0; line-height: 1.5; }
+  @media (max-width: 390px) { .settings { grid-template-columns: 1fr; } .panel { padding: 13px; } }
+</style>
+</head>
+<body>
+<main class="app">
+  <h1>⭕ Tic Tac Toe ❌</h1>
+  <p class="subtitle">Mỗi ván đấu, một màu sắc mới!</p>
+  <section class="panel">
+    <div class="settings">
+      <div>
+        <label for="players">CHẾ ĐỘ CHƠI</label>
+        <select id="players">
+          <option value="ai">1 người chơi</option>
+          <option value="two">2 người chơi</option>
+        </select>
+      </div>
+      <div id="difficulty-wrap">
+        <label for="difficulty">ĐỘ KHÓ</label>
+        <select id="difficulty">
+          <option value="easy">Dễ</option>
+          <option value="medium" selected>Trung bình</option>
+          <option value="hard">Khó</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="status" id="status" aria-live="polite">Lượt của bạn: X</div>
+    <div class="meta">
+      <span id="round">Ván 1</span>
+      <span class="turn" id="turn">X đang chơi</span>
+      <span id="color-label">Màu ván: Tím</span>
+    </div>
+    <div class="board" id="board" role="grid" aria-label="Bàn cờ Tic Tac Toe"></div>
+    <div class="actions">
+      <button class="primary" id="new-round">Ván mới</button>
+      <button class="secondary" id="reset">Chơi lại từ đầu</button>
+    </div>
+    <div class="scoreline">
+      <span>❌ X thắng: <strong id="x-score">0</strong></span>
+      <span>⭕ O thắng: <strong id="o-score">0</strong></span>
+      <span>Hòa: <strong id="draw-score">0</strong></span>
+    </div>
+    <p class="hint">Chế độ 1 người: bạn là X, máy là O. Độ khó thay đổi cách máy chọn nước đi.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const palette = [
+    { name: 'Tím', accent: '#9b7bff', x: '#ff7ac8', o: '#68e1fd' },
+    { name: 'Xanh lá', accent: '#39d98a', x: '#a6ff6f', o: '#5be7ff' },
+    { name: 'Cam', accent: '#ff914d', x: '#ffd166', o: '#8be9fd' },
+    { name: 'Hồng', accent: '#ff6fae', x: '#ff9f68', o: '#b8a1ff' },
+    { name: 'Xanh dương', accent: '#4da3ff', x: '#75e6da', o: '#ffc0f0' },
+    { name: 'Vàng', accent: '#e7c84b', x: '#fff176', o: '#80deea' }
+  ];
+  const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  let board = Array(9).fill('');
+  let current = 'X', gameOver = false, round = 1, colorIndex = -1;
+  let scores = { X: 0, O: 0, draw: 0 };
+  let aiTimer = null;
+
+  function chooseColor() {
+    let next = Math.floor(Math.random() * palette.length);
+    if (palette.length > 1 && next === colorIndex) next = (next + 1 + Math.floor(Math.random() * (palette.length - 1))) % palette.length;
+    colorIndex = next;
+    const p = palette[colorIndex];
+    document.documentElement.style.setProperty('--accent', p.accent);
+    document.documentElement.style.setProperty('--x-color', p.x);
+    document.documentElement.style.setProperty('--o-color', p.o);
+    $('color-label').textContent = 'Màu ván: ' + p.name;
+  }
+
+  function render() {
+    const boardEl = $('board');
+    boardEl.innerHTML = '';
+    board.forEach((mark, i) => {
+      const cell = document.createElement('button');
+      cell.className = 'cell' + (mark ? ' ' + mark.toLowerCase() : '');
+      cell.type = 'button';
+      cell.textContent = mark;
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('aria-label', `Ô ${i + 1}${mark ? ': ' + mark : ': trống'}`);
+      cell.disabled = gameOver || !!mark || (isAI() && current === 'O');
+      cell.addEventListener('click', () => play(i));
+      boardEl.appendChild(cell);
+    });
+    $('turn').textContent = gameOver ? 'Đã kết thúc' : current + ' đang chơi';
+    $('round').textContent = 'Ván ' + round;
+    $('x-score').textContent = scores.X;
+    $('o-score').textContent = scores.O;
+    $('draw-score').textContent = scores.draw;
+  }
+
+  function isAI() { return $('players').value === 'ai'; }
+  function getWinner(b = board) {
+    for (const line of wins) {
+      const [a, c, d] = line;
+      if (b[a] && b[a] === b[c] && b[a] === b[d]) return { mark: b[a], line };
+    }
+    return null;
+  }
+
+  function play(i) {
+    if (gameOver || board[i] || (isAI() && current === 'O')) return;
+    board[i] = current;
+    const result = finishIfNeeded();
+    if (result) return;
+    current = current === 'X' ? 'O' : 'X';
+    render();
+    if (isAI() && current === 'O') {
+      $('status').textContent = 'Máy đang suy nghĩ…';
+      aiTimer = setTimeout(() => {
+        aiTimer = null;
+        const move = chooseAIMove();
+        if (move !== -1 && !gameOver) {
+          board[move] = 'O';
+          const ended = finishIfNeeded();
+          if (!ended) { current = 'X'; $('status').textContent = 'Lượt của bạn: X'; render(); }
+        }
+      }, 280);
+    } else {
+      $('status').textContent = 'Lượt của ' + current;
+    }
+  }
+
+  function finishIfNeeded() {
+    const result = getWinner();
+    if (result) {
+      gameOver = true;
+      scores[result.mark]++;
+      $('status').textContent = result.mark + ' chiến thắng! 🎉';
+      render();
+      result.line.forEach(i => $('board').children[i]?.classList.add('win'));
+      saveScore();
+      return true;
+    }
+    if (board.every(Boolean)) {
+      gameOver = true;
+      scores.draw++;
+      $('status').textContent = 'Hòa rồi! 🤝';
+      render();
+      saveScore();
+      return true;
+    }
+    return false;
+  }
+
+  function chooseAIMove() {
+    const empty = board.map((v, i) => v ? -1 : i).filter(i => i !== -1);
+    if (!empty.length) return -1;
+    const difficulty = $('difficulty').value;
+    if (difficulty === 'easy') return empty[Math.floor(Math.random() * empty.length)];
+    // Trung bình: ưu tiên thắng, chặn đối thủ, rồi chọn trung tâm/góc.
+    const immediate = (mark) => {
+      for (const i of empty) {
+        board[i] = mark;
+        const win = !!getWinner();
+        board[i] = '';
+        if (win) return i;
+      }
+      return -1;
+    };
+    const winMove = immediate('O');
+    if (winMove !== -1) return winMove;
+    const blockMove = immediate('X');
+    if (blockMove !== -1) return blockMove;
+    if (difficulty === 'medium') {
+      if (board[4] === '') return 4;
+      const corners = [0, 2, 6, 8].filter(i => board[i] === '');
+      if (corners.length) return corners[Math.floor(Math.random() * corners.length)];
+      return empty[Math.floor(Math.random() * empty.length)];
+    }
+    // Khó: minimax, máy chơi tối ưu.
+    let bestScore = -Infinity, bestMoves = [];
+    for (const i of empty) {
+      board[i] = 'O';
+      const score = minimax(board, 0, false);
+      board[i] = '';
+      if (score > bestScore) { bestScore = score; bestMoves = [i]; }
+      else if (score === bestScore) bestMoves.push(i);
+    }
+    return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+  }
+
+  function minimax(b, depth, maximizing) {
+    const winner = getWinner(b);
+    if (winner) return winner.mark === 'O' ? 10 - depth : depth - 10;
+    if (b.every(Boolean)) return 0;
+    if (maximizing) {
+      let best = -Infinity;
+      for (let i = 0; i < 9; i++) if (!b[i]) {
+        b[i] = 'O'; best = Math.max(best, minimax(b, depth + 1, false)); b[i] = '';
+      }
+      return best;
+    }
+    let best = Infinity;
+    for (let i = 0; i < 9; i++) if (!b[i]) {
+      b[i] = 'X'; best = Math.min(best, minimax(b, depth + 1, true)); b[i] = '';
+    }
+    return best;
+  }
+
+  function saveScore() {
+    // Endpoint của bạn phải nhận JSON và trả về JSON, ví dụ { "ok": true, "best_score": 10 }.
+    fetch('../save_score.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game: 'tic_tac_toe', score: scores.X })
+    })
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(data => {
+      if (data.ok) console.log('Điểm cao nhất đã lưu:', data.best_score);
+      else console.warn(data.error || 'Không lưu được điểm');
+    })
+    .catch(err => console.warn('Không thể lưu điểm (kiểm tra đường dẫn save_score.php):', err));
+  }
+
+  function newRound(resetScores = false) {
+    if (aiTimer) { clearTimeout(aiTimer); aiTimer = null; }
+    if (resetScores) { scores = { X: 0, O: 0, draw: 0 }; round = 1; }
+    else round++;
+    board = Array(9).fill('');
+    current = 'X';
+    gameOver = false;
+    chooseColor();
+    $('status').textContent = isAI() ? 'Lượt của bạn: X' : 'Lượt của X';
+    render();
+  }
+
+  $('new-round').addEventListener('click', () => newRound(false));
+  $('reset').addEventListener('click', () => newRound(true));
+  $('players').addEventListener('change', () => newRound(false));
+  $('difficulty').addEventListener('change', () => {
+    if (isAI()) $('status').textContent = 'Đã đổi độ khó. Lượt của ' + current;
+  });
+
+  // Khởi tạo: render không làm đổi số ván.
+  round = 1;
+  chooseColor();
+  $('status').textContent = 'Lượt của bạn: X';
+  render();
+})();
+</script>
+</body>
+</html>
